@@ -9,6 +9,7 @@ import Cameras from './pages/Cameras';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Evacuation from './pages/Evacuation';
+import Drones from './pages/Drones';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/upload"    element={<Upload />} />
           <Route path="/incidents" element={<IncidentCenter />} />
           <Route path="/evacuation" element={<Evacuation />} />
+          <Route path="/drones"    element={<Drones />} />
           <Route path="/history"   element={<History />} />
           <Route path="/cameras"   element={<Cameras />} />
           <Route path="/analytics" element={<Analytics />} />

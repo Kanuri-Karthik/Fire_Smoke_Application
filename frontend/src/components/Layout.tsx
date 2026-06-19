@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { Flame, Activity, LayoutDashboard, History, Settings, Video, AlertTriangle, Moon, Sun, Bell, Map } from 'lucide-react';
+import { Flame, Activity, LayoutDashboard, History, Settings, Video, AlertTriangle, Moon, Sun, Bell, Map, Plane } from 'lucide-react';
 import { useAppSettingsStore } from '../store/appSettingsStore';
 import { useWebSocketStore } from '../store/websocketStore';
 import { APP_CONFIG } from '../config/appConfig';
@@ -21,6 +21,7 @@ const Layout = () => {
     { path: '/live', icon: <Activity size={20} />, label: 'Live Monitoring' },
     { path: '/incidents', icon: <AlertTriangle size={20} />, label: 'Incident Center' },
     { path: '/evacuation', icon: <Map size={20} />, label: 'Evacuation Routes' },
+    { path: '/drones', icon: <Plane size={20} />, label: 'Drone Fleet' },
     { path: '/upload', icon: <Video size={20} />, label: 'Upload' },
     { path: '/cameras', icon: <Video size={20} />, label: 'Cameras' },
     { path: '/history', icon: <History size={20} />, label: 'History' },
