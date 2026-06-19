@@ -1,52 +1,41 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent } from '../components/Common/Card';
-import { Badge } from '../components/Common/Badge';
 import { Button } from '../components/Common/Button';
-import { Camera, Camera as CameraIcon, Signal, Zap, AlertTriangle, ShieldCheck, Crosshair, Map as MapIcon, RotateCcw, VideoOff, Video as VideoIcon } from 'lucide-react';
+import { Camera, Map as MapIcon, Settings, Maximize, AlertCircle, Signal, Battery, VideoOff, Crosshair, ZoomIn, ZoomOut, RotateCcw, ShieldAlert, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SECTORS = ['Sector 4 North', 'Loading Dock', 'Sector 7 East', 'Main Lobby', 'Perimeter Fence', 'Server Room', 'Cafeteria'];
+const MOCK_CAMERAS = [
+  { id: 'CAM-01', location: 'Main Entrance', status: 'online', type: 'PTZ', alert: false },
+  { id: 'CAM-02', location: 'Loading Dock A', status: 'online', type: 'Fixed', alert: false },
+  { id: 'CAM-03', location: 'Server Room', status: 'online', type: 'Thermal', alert: true },
+  { id: 'CAM-04', location: 'Perimeter Fence', status: 'offline', type: 'PTZ', alert: false },
+  { id: 'CAM-05', location: 'Cafeteria', status: 'online', type: 'Fixed', alert: false },
+  { id: 'CAM-06', location: 'Parking Garage', status: 'online', type: 'PTZ', alert: false },
+];
 
 const CCTV = () => {
-  const [cameras, setCameras] = useState([
-    { id: 'PTZ-Alpha', status: 'patrolling', zoom: 1.2, signal: 98, sector: 'Sector 4 North', pan: 45, tilt: 15 },
-    { id: 'PTZ-Bravo', status: 'offline', zoom: 1.0, signal: 0, sector: 'Loading Dock', pan: 0, tilt: 0 },
-    { id: 'PTZ-Charlie', status: 'tracking', zoom: 4.5, signal: 92, sector: 'Sector 7 East', pan: -12, tilt: 5 },
-  ]);
-
-  const [selectedCamera, setSelectedCamera] = useState('PTZ-Charlie');
-  const [isLive, setIsLive] = useState(false);
+  const [cameras, setCameras] = useState(MOCK_CAMERAS);
+  const [activeCam, setActiveCam] = useState('CAM-01');
+  const [isManualOverride, setIsManualOverride] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [actionNotification, setActionNotification] = useState<string | null>(null);
 
-  const showNotification = (msg: string) => {
-    setActionNotification(msg);
-    setTimeout(() => setActionNotification(null), 3000);
-  };
-
-  // Simulate random signal fluctuation
+  // Flash warning for alerts
   useEffect(() => {
     const interval = setInterval(() => {
-      setCameras(prev => prev.map(c => ({
-        ...c,
-        signal: c.status === 'offline' ? 0 : Math.max(40, Math.min(100, c.signal + (Math.random() > 0.5 ? 2 : -2)))
-      })));
-    }, 3000);
+      setCameras(prev => prev.map(c => 
+        c.id === 'CAM-03' ? { ...c, alert: !c.alert } : c
+      ));
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const toggleLiveFeed = async () => {
-    if (isLive) {
+  const toggleOverride = async () => {
+    if (isManualOverride) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      setIsLive(false);
-      showNotification("Manual override disengaged.");
+      setIsManualOverride(false);
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -54,283 +43,158 @@ const CCTV = () => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-        setIsLive(true);
-        showNotification("Manual optical override engaged.");
+        setIsManualOverride(true);
       } catch (err) {
-        console.error("Error accessing webcam:", err);
-        alert("Unable to access camera for live feed. Please check permissions.");
+        console.error("Webcam error:", err);
       }
     }
   };
 
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
-
-  const activeCamera = cameras.find(c => c.id === selectedCamera);
-
-  // Button Handlers
-  const handleResetAllPTZ = () => {
-    setCameras(prev => prev.map(c => ({
-      ...c,
-      zoom: 1.0,
-      pan: 0,
-      tilt: 0,
-      status: c.status === 'offline' ? 'offline' : 'patrolling'
-    })));
-    showNotification("All cameras reset to home coordinates.");
-  };
-
-  const handleActivateReserve = () => {
-    const newId = `PTZ-${String.fromCharCode(68 + cameras.length)}`; // D, E, F...
-    const randomSector = SECTORS[Math.floor(Math.random() * SECTORS.length)];
-    const newCam = {
-      id: newId,
-      status: 'patrolling',
-      zoom: 1.0,
-      signal: 100,
-      sector: randomSector,
-      pan: 0,
-      tilt: 0
-    };
-    setCameras(prev => [...prev, newCam]);
-    setSelectedCamera(newId);
-    showNotification(`Reserve unit ${newId} deployed online.`);
-  };
-
-  const handleReassignSector = () => {
-    if (!activeCamera) return;
-    const currentSectorIndex = SECTORS.indexOf(activeCamera.sector);
-    let nextIndex = currentSectorIndex + 1;
-    if (nextIndex >= SECTORS.length) nextIndex = 0;
-    
-    setCameras(prev => prev.map(c => 
-      c.id === selectedCamera ? { ...c, sector: SECTORS[nextIndex] } : c
-    ));
-    showNotification(`${selectedCamera} reassigned to ${SECTORS[nextIndex]}.`);
-  };
-
-  const handleResetHomePosition = () => {
-    if (!activeCamera) return;
-    setCameras(prev => prev.map(c => 
-      c.id === selectedCamera ? { ...c, zoom: 1.0, pan: 0, tilt: 0 } : c
-    ));
-    showNotification(`${selectedCamera} returned to home (0,0) position.`);
-  };
+  const currentCamData = cameras.find(c => c.id === activeCam);
 
   return (
-    <div className="space-y-8 pb-10 relative">
-      <AnimatePresence>
-        {actionNotification && (
-          <motion.div 
-            initial={{ opacity: 0, y: -50, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -50, x: '-50%' }}
-            className="fixed top-10 left-1/2 z-50 px-6 py-3 bg-emerald-500/90 backdrop-blur-md text-white font-bold rounded-full shadow-[0_10px_40px_rgba(16,185,129,0.5)] border border-emerald-400"
-          >
-            {actionNotification}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="h-[calc(100vh-100px)] flex flex-col gap-6 font-sans">
+      {/* Header */}
+      <div className="flex justify-between items-end">
         <div>
-          <motion.h2 
-            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-            className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-3"
-          >
-            <CameraIcon className="text-indigo-500" /> PTZ Camera Network
-          </motion.h2>
-          <motion.p 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-            className="text-gray-500 dark:text-gray-400 mt-2 text-lg"
-          >
-            Command and control center for Pan-Tilt-Zoom thermal surveillance.
-          </motion.p>
+          <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+            <Cpu className="text-indigo-500" size={32} /> Central Surveillance Matrix
+          </h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest">
+            Enterprise Video Management System v4.2
+          </p>
         </div>
-        
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={handleResetAllPTZ} className="border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors">
-            <RotateCcw size={18} className="mr-2" /> Reset All PTZ
-          </Button>
-          <Button onClick={handleActivateReserve} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all">
-            <Zap size={18} className="mr-2" /> Activate Reserve Network
-          </Button>
+        <div className="flex items-center gap-4 bg-white dark:bg-[#151520] p-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 px-3 border-r border-gray-200 dark:border-gray-700">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-xs font-bold text-gray-600 dark:text-gray-300">SYSTEM ONLINE</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 text-red-500">
+            <AlertCircle size={16} />
+            <span className="text-xs font-bold">1 ACTIVE THREAT</span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      {/* Main Grid Interface */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
         
-        {/* Camera List */}
-        <div className="space-y-4 xl:col-span-1 max-h-[700px] overflow-y-auto custom-scrollbar pr-2">
-          <AnimatePresence>
-            {cameras.map(cam => (
-              <motion.div 
-                key={cam.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedCamera(cam.id)}
-                className={`p-4 rounded-2xl cursor-pointer border-2 transition-all mb-4 ${
-                  selectedCamera === cam.id 
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
-                    : 'border-gray-200 dark:border-white/5 bg-white dark:bg-[#151520] hover:border-indigo-300 shadow-sm'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <CameraIcon size={16} className={cam.status === 'tracking' ? 'text-rose-500 animate-pulse' : 'text-gray-400'} /> 
-                    {cam.id}
-                  </h4>
-                  <Badge type={cam.status === 'tracking' ? 'fire' : cam.status === 'offline' ? 'default' : 'smoke'}>
-                    {cam.status}
-                  </Badge>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-medium text-gray-500">
-                    <span className="flex items-center gap-1">Zoom: {cam.zoom.toFixed(1)}x</span>
-                    <span className="flex items-center gap-1"><Signal size={14} className={cam.signal < 20 ? 'text-red-500' : 'text-blue-500'}/> {cam.signal}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div className={`h-full ${cam.signal < 20 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${cam.signal}%` }}></div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {/* Selected Camera Telemetry */}
-        <div className="xl:col-span-3 space-y-6">
-          <Card className="border-none shadow-xl bg-white dark:bg-[#151520] rounded-3xl overflow-hidden relative">
-            <CardContent className="p-0">
-              {/* Camera Feed Mockup */}
-              <div className="w-full aspect-[21/9] bg-black relative overflow-hidden group">
-                
-                <video 
-                  ref={videoRef} 
-                  autoPlay 
-                  playsInline 
-                  muted 
-                  className={`absolute inset-0 w-full h-full object-cover ${isLive ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000`} 
-                />
-                
-                {!isLive && (
-                  <motion.div 
-                    key={selectedCamera}
-                    initial={{ opacity: 0 }} animate={{ opacity: 0.4 }} transition={{ duration: 0.5 }}
-                    className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?q=80&w=2074&auto=format&fit=crop')] bg-cover bg-center mix-blend-luminosity"
-                  ></motion.div>
-                )}
-                
-                {/* Thermal filter overlay if tracking */}
-                {activeCamera?.status === 'tracking' && !isLive && (
-                  <div className="absolute inset-0 bg-gradient-to-t from-rose-900/50 to-transparent mix-blend-overlay pointer-events-none"></div>
-                )}
-
-                {activeCamera?.status === 'offline' && !isLive && (
-                  <div className="absolute inset-0 bg-slate-900 flex items-center justify-center z-10">
-                    <div className="flex flex-col items-center gap-3">
-                      <AlertTriangle size={48} className="text-gray-600" />
-                      <p className="text-gray-500 font-mono font-bold tracking-widest uppercase">Signal Lost</p>
-                    </div>
+        {/* Left Side: Video Wall Grid */}
+        <div className="lg:col-span-3 grid grid-cols-2 lg:grid-cols-3 gap-4">
+          {cameras.map((cam) => (
+            <motion.div 
+              key={cam.id}
+              onClick={() => setActiveCam(cam.id)}
+              whileHover={{ scale: 1.02 }}
+              className={`relative rounded-xl overflow-hidden cursor-pointer group shadow-lg transition-all ${
+                activeCam === cam.id ? 'ring-4 ring-indigo-500 z-10' : 'border border-gray-800'
+              } ${cam.alert ? 'ring-2 ring-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : ''}`}
+            >
+              {/* Video Feed Placeholder */}
+              <div className="absolute inset-0 bg-black">
+                {cam.status === 'online' ? (
+                  <div className={`w-full h-full bg-cover bg-center opacity-60 group-hover:opacity-100 transition-opacity ${cam.type === 'Thermal' ? 'mix-blend-luminosity' : ''}`} style={{ backgroundImage: `url(https://images.unsplash.com/photo-1557597774-9d273605dfa9?q=80&w=1000&auto=format&fit=crop)` }}></div>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900">
+                    <VideoOff size={32} className="text-gray-600 mb-2" />
+                    <span className="text-gray-500 text-xs font-mono font-bold tracking-widest">NO SIGNAL</span>
                   </div>
                 )}
-
-                {/* HUD Elements */}
-                <div className="absolute inset-0 pointer-events-none p-6 flex flex-col justify-between font-mono text-emerald-400">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="flex items-center gap-2">
-                        {isLive ? <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span> : null}
-                        {activeCamera?.status === 'offline' ? 'OFFLINE' : isLive ? 'LIVE REC' : 'STANDBY'}
-                      </p>
-                      <p>PAN: {isLive ? '0°' : `${activeCamera?.pan ?? 0}°`}</p>
-                      <p>TILT: {isLive ? '0°' : `${activeCamera?.tilt ?? 0}°`}</p>
-                    </div>
-                    <div className="text-right">
-                      <p>LAT: 34.0522° N</p>
-                      <p>LON: 118.2437° W</p>
-                      <p>MODE: {isLive ? 'OPTICAL' : 'THERMAL'}</p>
-                    </div>
-                  </div>
-                  
-                  {activeCamera?.status === 'tracking' && !isLive && (
-                    <motion.div 
-                      initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-                    >
-                      <Crosshair size={120} className="text-rose-500 opacity-80" />
-                      <p className="mt-2 text-rose-500 font-bold bg-black/50 px-3 py-1 rounded">THERMAL ANOMALY DETECTED</p>
-                    </motion.div>
-                  )}
-
-                  <div className="flex justify-between items-end">
-                    <p>CAM ID: {activeCamera?.id}</p>
-                    <p>{activeCamera?.status === 'offline' ? 'MAINTENANCE REQUIRED' : isLive ? 'MANUAL OVERRIDE' : 'SYSTEM OPTIMAL'}</p>
-                  </div>
-                </div>
-
-                {/* Scanline effect */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-50 mix-blend-overlay"></div>
+                
+                {cam.type === 'Thermal' && (
+                  <div className="absolute inset-0 bg-gradient-to-t from-orange-900/40 to-transparent mix-blend-color"></div>
+                )}
               </div>
-            </CardContent>
-          </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-indigo-600 border-none text-white shadow-xl rounded-3xl overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-4 opacity-20"><MapIcon size={80} /></div>
-              <CardContent className="p-6 relative z-10">
-                <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-1">Current Sector</p>
-                <h3 className="text-2xl font-black">{activeCamera?.sector}</h3>
-                <div className="mt-4 flex gap-2">
-                  <Button onClick={handleReassignSector} variant="outline" className="border-indigo-400 text-white hover:bg-indigo-500 w-full text-xs">Reassign Sector</Button>
+              {/* Overlays */}
+              <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-start">
+                <div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider text-white ${cam.alert ? 'bg-red-500' : 'bg-black/50'}`}>
+                    {cam.id}
+                  </span>
+                  <p className="text-white/80 text-xs font-medium mt-1 drop-shadow-md">{cam.location}</p>
                 </div>
-              </CardContent>
-            </Card>
+                {cam.type === 'PTZ' && <Crosshair size={14} className="text-white/50" />}
+              </div>
 
-            <Card className="bg-white dark:bg-[#151520] border-none shadow-xl rounded-3xl">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-gray-500 text-sm font-bold uppercase tracking-wider mb-1">Subsystem</p>
-                    <h3 className="text-xl font-black text-gray-900 dark:text-white">IR Illuminator</h3>
-                  </div>
-                  <ShieldCheck className={activeCamera?.status === 'offline' ? "text-gray-500" : "text-emerald-500"} />
-                </div>
-                <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full ${activeCamera?.status === 'offline' ? 'bg-gray-500' : 'bg-blue-500'} w-[80%]`}></div>
-                </div>
-                <p className="text-xs text-gray-500 text-right font-medium">80% Range</p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-[#151520] border-none shadow-xl rounded-3xl">
-              <CardContent className="p-6 flex flex-col justify-center h-full gap-3">
-                <Button 
-                  onClick={toggleLiveFeed}
-                  disabled={activeCamera?.status === 'offline'}
-                  className={`w-full text-white rounded-xl disabled:opacity-50 ${isLive ? 'bg-red-500 hover:bg-red-600 animate-pulse' : 'bg-indigo-500 hover:bg-indigo-600'}`}
-                >
-                  {isLive ? <VideoOff className="mr-2" size={18} /> : <VideoIcon className="mr-2" size={18} />}
-                  {isLive ? 'End Manual Override' : 'Manual PTZ Override'}
-                </Button>
-                <Button onClick={handleResetHomePosition} variant="outline" className="w-full rounded-xl border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5">
-                  Reset to Home Position
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+              <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-end font-mono text-[10px] text-emerald-400">
+                <span>{cam.status === 'online' ? 'REC •' : ''}</span>
+                <span>{new Date().toLocaleTimeString()}</span>
+              </div>
+            </motion.div>
+          ))}
         </div>
 
+        {/* Right Side: Active Camera Inspector & Controls */}
+        <div className="flex flex-col gap-4">
+          
+          {/* Main Feed View */}
+          <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800 relative aspect-video flex-shrink-0">
+            {isManualOverride ? (
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: `scale(${zoomLevel})` }} />
+            ) : (
+              <div className="w-full h-full bg-[url('https://images.unsplash.com/photo-1557597774-9d273605dfa9?q=80&w=1000&auto=format&fit=crop')] bg-cover bg-center" style={{ transform: `scale(${zoomLevel})` }}></div>
+            )}
+            
+            {/* HUD Overlay */}
+            <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between border-[1px] border-white/10 m-2 rounded-lg">
+              <div className="flex justify-between items-start font-mono text-xs font-bold text-white drop-shadow-md">
+                <div className="flex flex-col gap-1">
+                  <span className="bg-red-500 px-2 py-0.5 rounded flex items-center gap-2">LIVE <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span></span>
+                  <span className="bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm">{activeCam}</span>
+                </div>
+                <span className="bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm">{currentCamData?.type} MODE</span>
+              </div>
+              <div className="flex justify-between items-end">
+                <Crosshair size={24} className="text-white/30" />
+                <span className="font-mono text-emerald-400 text-[10px] bg-black/80 px-2 py-1 rounded">ZOOM: {zoomLevel.toFixed(1)}X</span>
+              </div>
+            </div>
+            {/* Scanlines */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-30"></div>
+          </div>
+
+          {/* Controls Deck */}
+          <div className="bg-white dark:bg-[#151520] border border-gray-100 dark:border-gray-800 rounded-2xl p-5 flex-1 flex flex-col shadow-sm">
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-100 dark:border-gray-800 pb-2">PTZ Command Deck</h3>
+            
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-gray-50 dark:bg-[#1A1A24] p-3 rounded-xl">
+                <span className="block text-[10px] text-gray-500 font-bold mb-1">LOCATION</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{currentCamData?.location}</span>
+              </div>
+              <div className="bg-gray-50 dark:bg-[#1A1A24] p-3 rounded-xl">
+                <span className="block text-[10px] text-gray-500 font-bold mb-1">NETWORK</span>
+                <span className="text-sm font-semibold text-emerald-500 flex items-center gap-1"><Signal size={12}/> 99% STR</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-auto">
+              {currentCamData?.type === 'PTZ' && (
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setZoomLevel(z => Math.min(z + 0.5, 5.0))}>
+                    <ZoomIn size={16} />
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setZoomLevel(z => Math.max(z - 0.5, 1.0))}>
+                    <ZoomOut size={16} />
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setZoomLevel(1.0)}>
+                    <RotateCcw size={16} />
+                  </Button>
+                </div>
+              )}
+              
+              <Button 
+                onClick={toggleOverride}
+                disabled={currentCamData?.status === 'offline'}
+                className={`w-full py-4 text-white font-bold rounded-xl shadow-lg transition-all ${isManualOverride ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+              >
+                {isManualOverride ? 'DISENGAGE MANUAL OVERRIDE' : 'ENGAGE OPTICAL OVERRIDE'}
+              </Button>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
