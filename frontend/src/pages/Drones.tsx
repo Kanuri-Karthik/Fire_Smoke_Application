@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '../components/Common/Card';
 import { Badge } from '../components/Common/Badge';
 import { Button } from '../components/Common/Button';
-import { Plane, Battery, Signal, Zap, AlertTriangle, ShieldCheck, Crosshair, Map as MapIcon, RotateCcw } from 'lucide-react';
+import { Plane, Battery, Signal, Zap, AlertTriangle, ShieldCheck, Crosshair, Map as MapIcon, RotateCcw, VideoOff, Video as VideoIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Drones = () => {
@@ -13,6 +13,9 @@ const Drones = () => {
   ]);
 
   const [selectedDrone, setSelectedDrone] = useState('DRN-Charlie');
+  const [isLive, setIsLive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Simulate random battery drain and signal fluctuation
   useEffect(() => {
@@ -24,6 +27,39 @@ const Drones = () => {
       })));
     }, 3000);
     return () => clearInterval(interval);
+  }, []);
+
+  const toggleLiveFeed = async () => {
+    if (isLive) {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setIsLive(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setIsLive(true);
+      } catch (err) {
+        console.error("Error accessing webcam:", err);
+        alert("Unable to access camera for live feed. Please check permissions.");
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   const activeDrone = drones.find(d => d.id === selectedDrone);
@@ -99,31 +135,45 @@ const Drones = () => {
         <div className="xl:col-span-3 space-y-6">
           <Card className="border-none shadow-xl bg-white dark:bg-[#151520] rounded-3xl overflow-hidden relative">
             <CardContent className="p-0">
-              {/* Drone Camera Feed Mockup */}
-              <div className="w-full aspect-[21/9] bg-slate-900 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?q=80&w=2074&auto=format&fit=crop')] bg-cover bg-center opacity-40 mix-blend-luminosity"></div>
+              {/* Drone Camera Feed */}
+              <div className="w-full aspect-[21/9] bg-black relative overflow-hidden group">
+                
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  className={`absolute inset-0 w-full h-full object-cover ${isLive ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000`} 
+                />
+                
+                {!isLive && (
+                  <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?q=80&w=2074&auto=format&fit=crop')] bg-cover bg-center opacity-40 mix-blend-luminosity"></div>
+                )}
                 
                 {/* Thermal filter overlay if intercepting */}
                 {activeDrone?.status === 'intercepting' && (
-                  <div className="absolute inset-0 bg-gradient-to-t from-rose-900/50 to-transparent mix-blend-overlay"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-rose-900/50 to-transparent mix-blend-overlay pointer-events-none"></div>
                 )}
 
                 {/* HUD Elements */}
                 <div className="absolute inset-0 pointer-events-none p-6 flex flex-col justify-between font-mono text-emerald-400">
                   <div className="flex justify-between">
                     <div>
-                      <p>REC •</p>
-                      <p>ALT: 420ft</p>
-                      <p>SPD: 45knots</p>
+                      <p className="flex items-center gap-2">
+                        {isLive ? <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span> : null}
+                        {isLive ? 'LIVE REC' : 'STANDBY'}
+                      </p>
+                      <p>ALT: {isLive ? '24ft' : '420ft'}</p>
+                      <p>SPD: {isLive ? '0knots' : '45knots'}</p>
                     </div>
                     <div className="text-right">
                       <p>GPS: 34.0522° N</p>
                       <p>118.2437° W</p>
-                      <p>CAM: THERMAL</p>
+                      <p>CAM: {isLive ? 'OPTICAL' : 'THERMAL'}</p>
                     </div>
                   </div>
                   
-                  {activeDrone?.status === 'intercepting' && (
+                  {activeDrone?.status === 'intercepting' && !isLive && (
                     <motion.div 
                       initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                       className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
@@ -135,12 +185,12 @@ const Drones = () => {
 
                   <div className="flex justify-between items-end">
                     <p>UAV ID: {activeDrone?.id}</p>
-                    <p>SYSTEM OPTIMAL</p>
+                    <p>{isLive ? 'MANUAL OVERRIDE' : 'SYSTEM OPTIMAL'}</p>
                   </div>
                 </div>
 
                 {/* Scanline effect */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-50"></div>
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-50 mix-blend-overlay"></div>
               </div>
             </CardContent>
           </Card>
@@ -175,7 +225,13 @@ const Drones = () => {
 
             <Card className="bg-white dark:bg-[#151520] border-none shadow-xl rounded-3xl">
               <CardContent className="p-6 flex flex-col justify-center h-full gap-3">
-                <Button className="w-full bg-rose-500 hover:bg-rose-600 text-white rounded-xl">Manual Override (Pilot)</Button>
+                <Button 
+                  onClick={toggleLiveFeed}
+                  className={`w-full text-white rounded-xl ${isLive ? 'bg-red-500 hover:bg-red-600 animate-pulse' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                >
+                  {isLive ? <VideoOff className="mr-2" size={18} /> : <VideoIcon className="mr-2" size={18} />}
+                  {isLive ? 'End Manual Override' : 'Manual Override (Pilot)'}
+                </Button>
                 <Button variant="outline" className="w-full rounded-xl border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5">Return to Base</Button>
               </CardContent>
             </Card>
