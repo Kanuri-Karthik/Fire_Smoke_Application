@@ -1,0 +1,68 @@
+"""
+Dashboard routes — /api/v1/dashboard
+"""
+import logging
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from typing import Optional, List
+from datetime import datetime, timedelta
+
+from ..database import get_db
+from .. import models, schemas
+from ..services.analytics_service import get_timeline, get_zones
+
+logger = logging.getLogger("fireguard.dashboard")
+router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
+
+
+@router.get("/stats", response_model=schemas.DashboardStats)
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(models.Alert).count()
+    active = db.query(models.Alert).filter(models.Alert.status == "active").count()
+    fire = db.query(models.Alert).filter(models.Alert.detection_type == "fire").count()
+    smoke = db.query(models.Alert).filter(models.Alert.detection_type == "smoke").count()
+    cameras = db.query(func.count(models.Camera.id)).scalar() or 0
+    recent = (
+        db.query(models.Alert)
+        .order_by(models.Alert.timestamp.desc())
+        .limit(10)
+        .all()
+    )
+    return schemas.DashboardStats(
+        total_alerts=total,
+        active_alerts=active,
+        fire_alerts=fire,
+        smoke_alerts=smoke,
+        connected_cameras=cameras,
+        recent_alerts=recent,
+    )
+
+
+@router.get("/analytics")
+def get_analytics(
+    range: str = Query("24h", regex="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    return {
+        "timeline": get_timeline(db, range),
+        "zones": get_zones(db),
+    }
+
+
+@router.get("/events", response_model=List[schemas.DetectionEventOut])
+def get_events(
+    detection_type: Optional[str] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    limit: int = Query(200, le=500),
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.DetectionEvent)
+    if detection_type:
+        q = q.filter(models.DetectionEvent.detection_type == detection_type)
+    if date_from:
+        q = q.filter(models.DetectionEvent.timestamp >= date_from)
+    if date_to:
+        q = q.filter(models.DetectionEvent.timestamp <= date_to)
+    return q.order_by(models.DetectionEvent.timestamp.desc()).limit(limit).all()
